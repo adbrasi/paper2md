@@ -16,8 +16,9 @@ def parser():
     root = argparse.ArgumentParser(description="Busque papers, escolha IDs e obtenha PDF + Markdown completo.")
     root.add_argument("--version", action="version", version=f"paper2md {__version__}")
     commands = root.add_subparsers(dest="command", required=True)
-    search = commands.add_parser("search", help="Pesquisar por descrição do assunto")
-    search.add_argument("query")
+    search = commands.add_parser("search", help="Pesquisar papers; várias consultas são combinadas")
+    search.add_argument("queries", nargs="+", metavar="query",
+                        help="Consultas técnicas em inglês (1 a 5); o arXiv exige todos os termos de cada consulta")
     search.add_argument("--since", help="Data inicial YYYY-MM-DD; padrão: últimos dois anos")
     search.add_argument("--limit", type=int, default=10)
     search.add_argument("--sort", choices=("relevance", "recent"), default="relevance")
@@ -30,6 +31,8 @@ def parser():
         cmd.add_argument("-o", "--output", type=Path, default=Path("papers"), help="Diretório de saída")
         cmd.add_argument("--no-describe-images", action="store_true", help="Desativar descrições (ativadas por padrão)")
         cmd.add_argument("--no-images", action="store_true", help="Não salvar imagens; preservar descrições")
+        cmd.add_argument("--engine", choices=("mistral", "local"), default=os.getenv("PAPER2MD_ENGINE", "auto"),
+                         help="mistral: OCR + figuras (pago); local: texto via PyMuPDF (grátis). Padrão: mistral se houver MISTRAL_API_KEY")
         cmd.add_argument("--model", default=os.getenv("OCR_MODEL", "mistral-ocr-latest"))
         cmd.add_argument("--json", action="store_true")
         cmd.add_argument("--force", action="store_true", help="Permitir substituir destino existente")
@@ -54,7 +57,7 @@ def main(argv=None):
         transport = Transport()
         if args.command == "search":
             print("Pesquisando fontes online...", file=sys.stderr)
-            result = Searcher(store, transport).search_papers(args.query, args.since, args.limit, args.sort)
+            result = Searcher(store, transport).search_papers(args.queries, args.since, args.limit, args.sort)
             for warning in result["warnings"]:
                 print("Aviso: " + warning, file=sys.stderr)
             if args.json:
@@ -69,7 +72,7 @@ def main(argv=None):
                     print("  " + (paper["url"] or paper["id"]) + "\n")
                 print("Escolha: paper2md get <selection_id> <selection_id>")
             return 0
-        options = Options(output=args.output, model=args.model, describe_images=not args.no_describe_images,
+        options = Options(output=args.output, engine=args.engine, model=args.model, describe_images=not args.no_describe_images,
                           images=not args.no_images, force=args.force,
                           format=getattr(args, "format", "md"), pages=parse_pages(getattr(args, "pages", None)))
         service = PaperService(store, transport)

@@ -44,17 +44,18 @@ class APITests(unittest.TestCase):
             with self.assertRaises(PaperError):
                 Searcher(Store(Path(d)), Transport(c), rate_limit=False).search_papers("query")
 
-    def test_expansion_failure_falls_back_without_invented_papers(self):
+    def test_multiple_queries_hit_both_providers_and_fuse(self):
+        seen = []
         def handler(request):
-            if request.method == "POST":
-                return httpx.Response(401)
+            seen.append(request)
             if request.url.host == "api.openalex.org":
                 return httpx.Response(200, json={"results": []})
             return httpx.Response(200, text=ATOM)
         with tempfile.TemporaryDirectory() as d, httpx.Client(transport=httpx.MockTransport(handler)) as c:
-            result = Searcher(Store(Path(d)), Transport(c), key="test", rate_limit=False).search_papers("LoRA")
-            self.assertEqual(result["technical_query"], "LoRA")
-            self.assertTrue(any("expansão" in x for x in result["warnings"]))
+            result = Searcher(Store(Path(d)), Transport(c), rate_limit=False).search_papers(["LoRA", "DoRA"], since="2025-01-01")
+            self.assertEqual(result["queries"], ["LoRA", "DoRA"])
+            self.assertEqual(len(seen), 4)
+            self.assertEqual([r["id"] for r in result["results"]], ["arxiv:2601.12345v2"])
 
     def test_openalex_metadata_and_date_filter(self):
         seen = []
@@ -71,7 +72,8 @@ class APITests(unittest.TestCase):
             result = Searcher(Store(Path(d)), Transport(c), rate_limit=False).search_papers("method", since="2025-01-01")
             self.assertEqual(result["results"][0]["abstract"], "A method")
             self.assertEqual(result["results"][0]["venue"], "ICLR")
-            self.assertIn("from_publication_date:2025-01-01", seen[0].url.params["filter"])
+            # OpenAlex semantic search rejects date filters; only publication_year is accepted.
+            self.assertEqual(f"publication_year:2025-{date.today().year}", seen[0].url.params["filter"])
 
     def test_ocr_annotations_are_default_and_pages_zero_based(self):
         seen = []

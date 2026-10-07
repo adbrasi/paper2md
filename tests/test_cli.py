@@ -25,9 +25,6 @@ class CLITests(unittest.TestCase):
         requests = []
         def handler(request):
             requests.append(request)
-            if request.url.path == "/v1/chat/completions":
-                return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({
-                    "technical_query": "low rank adaptation", "arxiv_queries": ["low rank adaptation"]})}}]})
             if request.url.host == "api.openalex.org":
                 return httpx.Response(200, json={"results": []})
             if request.url.path == "/api/query":
@@ -42,7 +39,7 @@ class CLITests(unittest.TestCase):
                     with redirect_stdout(stdout), redirect_stderr(stderr):
                         code = main(list(args) + ["--json"])
                     return code, json.loads(stdout.getvalue()), stderr.getvalue()
-                code, found, _ = command("search", "adaptação com LoRA", "--since", "2025-01-01")
+                code, found, _ = command("search", "low rank adaptation", "--since", "2025-01-01")
                 self.assertEqual(code, 0)
                 selected = found["results"][0]["selection_id"]
                 code, acquired, progress = command("get", selected, "-o", str(Path(d) / "out"))

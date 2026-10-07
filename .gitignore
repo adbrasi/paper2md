@@ -9,3 +9,4 @@ papers/
 work/
 outputs/
 *.sqlite3*
+e2e-report.json

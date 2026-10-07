@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import hashlib
 import json
 from pathlib import Path
@@ -7,6 +7,7 @@ import tempfile
 
 from .export import publish_bundle, markdown_to_text
 from .mistral import MistralOCR
+from .pdfmeta import extract_local
 from .search import openalex_paper
 from .sources import direct_source, fetch_pdf
 from .store import timestamp
@@ -22,9 +23,13 @@ class Options:
     describe_images: bool = True
     images: bool = True
     force: bool = False
+    engine: str = "auto"  # "mistral" (OCR + figure descriptions), "local" (free PyMuPDF text) or "auto"
 
     def conversion(self):
-        return {"model": self.model, "pages": self.pages, "describe_images": self.describe_images, "images": self.images}
+        if self.engine == "local":
+            return {"engine": "local", "pages": self.pages}
+        return {"engine": "mistral", "model": self.model, "pages": self.pages,
+                "describe_images": self.describe_images, "images": self.images}
 
 
 def digest(value):
@@ -51,6 +56,18 @@ class PaperService:
             paper = direct_source(source)
         self.store.save_paper(paper)
         return paper
+
+    def resolved(self, options):
+        if options.engine not in ("auto", "mistral", "local"):
+            raise PaperError("Engine inválida; use mistral ou local.")
+        if options.engine == "auto":
+            return replace(options, engine="mistral" if self.ocr.key else "local")
+        return options
+
+    def convert(self, pdf, options):
+        if options.engine == "local":
+            return extract_local(pdf, options.pages)
+        return self.ocr.process(pdf, options.model, options.pages, options.describe_images, options.images)
 
     def target(self, paper, options):
         slug = re.sub(r"[^A-Za-z0-9._-]", "_", paper.id)[:90]
@@ -94,7 +111,7 @@ class PaperService:
                 response = json.loads((cached / "ocr.json").read_text(encoding="utf-8"))
                 manifest = json.loads((cached / "manifest.json").read_text(encoding="utf-8"))
             else:
-                response = self.ocr.process(pdf, **options.conversion())
+                response = self.convert(pdf, options)
                 manifest = {"schema_version": 1, "paper": paper.to_dict(), "fetched_at": timestamp(),
                     "pdf_sha256": pdf_hash, "cache_key": cache_key, "options": options.conversion(),
                     "actual_model": response.get("model"), "usage": response.get("usage_info"),
@@ -106,7 +123,7 @@ class PaperService:
             return {"id": paper.id, "status": "cached" if cached else "ok", "files": self.files(target), "warnings": warnings}
 
     def get_papers(self, sources, options=None):
-        options = options or Options()
+        options = self.resolved(options or Options())
         if options.format not in ("md", "txt", "json"):
             raise PaperError("Formato inválido.")
         items = []
@@ -120,7 +137,7 @@ class PaperService:
         return result
 
     def read_paper(self, source, options=None):
-        options = options or Options()
+        options = self.resolved(options or Options())
         paper = self.resolve(source)
         bundle = self.store.bundle(paper.id)
         manifest = None

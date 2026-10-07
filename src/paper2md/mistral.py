@@ -49,7 +49,10 @@ class MistralOCR:
             payload["pages"] = pages
         if describe_images:
             payload["bbox_annotation_format"] = ANNOTATION_FORMAT
-        response = self.transport.post_json("https://api.mistral.ai/v1/ocr", payload, self.key)
+        try:
+            response = self.transport.post_json("https://api.mistral.ai/v1/ocr", payload, self.key)
+        except PaperError as exc:
+            raise PaperError(f"{exc} Para extração local gratuita, use --engine local.") from None
         if not isinstance(response, dict) or not isinstance(response.get("pages"), list) or not response["pages"]:
             raise PaperError("Mistral OCR retornou páginas ausentes ou vazias.")
         indices = set()
