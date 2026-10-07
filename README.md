@@ -2,6 +2,8 @@
 
 Pesquise um assunto, escolha papers e entregue PDF + texto completo aos seus agentes. CLI Python pequena, sem servidor, Docker ou índice vetorial local.
 
+Agentes (Claude Code, Codex): leiam [AGENTS.md](AGENTS.md).
+
 ## Instalar
 
 Requer Python 3.11 ou superior.
