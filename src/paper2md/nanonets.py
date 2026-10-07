@@ -15,6 +15,9 @@ def clean_page(markdown):
     # The OCR model emits escaped placeholder tags and can loop on figure grids (thousands of
     # indented "<img>" lines); collapse that noise so a single page cannot flood the agent's context.
     markdown = re.sub(r"&lt;page_number&gt;.*?&lt;/page_number&gt;", "", markdown)
+    # "<img>text</img>" carries the model's description of a figure; a bare "<img>" has none.
+    markdown = re.sub(r"&lt;img&gt;(.*?)&lt;/img&gt;", lambda m: f"[Figura: {m[1].strip()}]" if m[1].strip() else "[Figura]",
+                      markdown, flags=re.S)
     markdown = markdown.replace("&lt;img&gt;", "[Figura]")
     markdown = re.sub(r"[ \t]{3,}", " ", markdown)
     lines = []
