@@ -33,6 +33,9 @@ class Transport:
         detail = {401: "autenticação inválida", 403: "acesso bloqueado; use um PDF local se tiver acesso",
                   404: "documento não encontrado", 429: "limite de requisições/orçamento atingido",
                   402: "créditos insuficientes"}.get(status, "requisição recusada")
+        if status == 429 and response.headers.get("x-ratelimit-limit-req-minute") == "0":
+            # Not throttling: the plan grants this model zero requests, so waiting never helps.
+            detail = "modelo sem cota no plano atual (limite 0 req/min; no Mistral, ative pay-as-you-go)"
         try:
             body = response.read()[:2000].decode("utf-8", "replace")
             reason = re.search(r'"(?:detail|message)"\s*:\s*"([^"]{1,200})', body)
