@@ -1,3 +1,4 @@
+import re
 import time
 import httpx
 from urllib.parse import urlparse
@@ -32,6 +33,12 @@ class Transport:
         detail = {401: "autenticação inválida", 403: "acesso bloqueado; use um PDF local se tiver acesso",
                   404: "documento não encontrado", 429: "limite de requisições/orçamento atingido",
                   402: "créditos insuficientes"}.get(status, "requisição recusada")
+        try:
+            body = response.read()[:2000].decode("utf-8", "replace")
+            reason = re.search(r'"(?:detail|message)"\s*:\s*"([^"]{1,200})', body)
+            detail += f" ({reason[1]})" if reason else ""
+        except httpx.HTTPError:
+            pass
         raise PaperError(f"{service}: HTTP {status}, {detail}.")
 
     def get(self, url, params=None, headers=None, service="Fonte", limit=None):
@@ -67,9 +74,12 @@ class Transport:
         except (ValueError, UnicodeDecodeError):
             raise PaperError("Fonte retornou JSON inválido.") from None
 
-    def post_json(self, url, payload, key, service="Mistral"):
+    def post_form(self, url, data, files, key, service):
+        return self.post_json(url, None, key, service, data=data, files=files)
+
+    def post_json(self, url, payload, key, service="Mistral", **form):
         try:
-            response = self.client.post(url, json=payload, headers={"Authorization": f"Bearer {key}"})
+            response = self.client.post(url, json=payload, headers={"Authorization": f"Bearer {key}"}, **form)
             self._status(response, service)
             return response.json()
         except httpx.HTTPError:

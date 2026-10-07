@@ -111,7 +111,7 @@ def write_json(path, data):
     Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def publish_bundle(target, pdf, response, manifest, options):
+def publish_bundle(target, pdf, response, manifest, options, notes=()):
     target = Path(target)
     root = target.parent.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -128,6 +128,7 @@ def publish_bundle(target, pdf, response, manifest, options):
         write_json(staging / "ocr.json", response)
         if options.format == "txt":
             (staging / "paper.txt").write_text(markdown_to_text(markdown), encoding="utf-8")
+        warnings = [*notes, *warnings]
         manifest["warnings"] = warnings
         write_json(staging / "manifest.json", manifest)
         if target.exists():

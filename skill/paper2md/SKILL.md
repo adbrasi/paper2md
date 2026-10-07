@@ -41,7 +41,7 @@ Each `items[]` entry has `status` (`ok` | `cached` | `error`) and `files`: `pdf`
 
 Read `files.markdown` with your file-reading tool. Pages are delimited by `<!-- Página N -->` — cite page numbers when you compare or quote. Papers are often 50–150k characters: grep for sections (Method, Experiments, Table, Limitations) or read in chunks instead of loading everything when you only need specific facts.
 
-With the `local` engine, tables come out one cell per line. When a comparison depends on a table's numbers, open `files.pdf` and read that page directly (your PDF reader sees the layout), or rerun that paper with `--engine mistral --pages N` if a key is available. `manifest.json` → `options.engine` tells which engine produced the text.
+Each item's `engine` field (also `manifest.json` → `options.engine`) says which engine produced the text. Tables come out as Markdown (`local`, `mistral`) or HTML `<table>` (`nanonets`); equations are LaTeX except with `local`. When an exact number matters and the text looks garbled, check that page in `files.pdf`.
 
 `paper2md read <id> --json` returns `{markdown, manifest, files}` in one shot (and converts if needed); it can be very large on stdout, so prefer reading the file.
 
@@ -49,9 +49,12 @@ For comparing many papers, delegate one paper per subagent with the same extract
 
 ## Engines
 
-- `local` (default when `MISTRAL_API_KEY` is unset): PyMuPDF text, free, offline, seconds. Good for born-digital PDFs (arXiv). No table/equation reconstruction, no figure descriptions; fails on scanned PDFs.
-- `mistral` (default when `MISTRAL_API_KEY` is set): Mistral OCR — Markdown tables/equations, extracted figures with AI descriptions (Portuguese). Paid per page; PDFs up to 50 MiB (image-heavy diffusion papers often exceed it → `local`). Use `--pages 1` to test cheaply.
-- Force with `--engine local|mistral`. If Mistral returns 401/402/429, the error says so: retry with `--engine local` and tell the user.
+Default `auto` tries **Mistral OCR → Nanonets → local**, skipping APIs without a key (`MISTRAL_API_KEY`, `NANONETS_API_KEY`). A failing engine (quota, credits, >50 MiB for Mistral, missing pages, timeout) hands over to the next one; the failure appears in the item's `warnings`. Don't retry manually — just report which engine was used if quality matters.
+
+- `mistral`: best fidelity, figures extracted with AI descriptions (Portuguese). Seconds.
+- `nanonets`: good Markdown + HTML tables + LaTeX. >5 pages runs async: **~3 min for a 20-page paper**, so run `get` with a long timeout (≥ 10 min) or in the background.
+- `local` (pymupdf4llm): free, offline, ~0.5 s/page, layout-aware with Markdown tables. No OCR for scanned PDFs.
+- `--engine X` forces one. In `auto`, an existing conversion from any engine is reused; to upgrade a `local` result to OCR, pass `--engine mistral` or `--engine nanonets`. `--pages 1` tests a paid engine cheaply.
 
 ## Failures
 

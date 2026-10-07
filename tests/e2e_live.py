@@ -1,6 +1,6 @@
 """Live end-to-end check against the real APIs, driven exactly as an agent would: subprocess + JSON.
 
-Run: python -X utf8 tests/e2e_live.py [--engine local|mistral]
+Run: python -X utf8 tests/e2e_live.py [--engine auto|mistral|nanonets|local]
 Writes e2e-report.json in the working directory. Uses an isolated state/output directory.
 """
 import argparse
@@ -24,7 +24,7 @@ def run(env, *args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--engine", choices=("local", "mistral"), default="local")
+    parser.add_argument("--engine", choices=("auto", "mistral", "nanonets", "local"), default="auto")
     engine = parser.parse_args().engine
     work = Path(tempfile.mkdtemp(prefix="paper2md-e2e-"))
     env = {**os.environ, "PAPER2MD_HOME": str(work / "state"), "PYTHONUTF8": "1"}
@@ -65,11 +65,13 @@ def main():
     checks["get_huggingface_link"] = step["exit"] == 0 and direct["items"][0]["status"] in ("ok", "cached")
 
     report = {"engine": engine, "workdir": str(work), "passed": all(checks.values()), "checks": checks,
+              "engines_used": [i.get("engine") for i in items],
               "selected": [{"id": i.get("id"), "files": i.get("files"), "warnings": i.get("warnings")} for i in items],
               "read_preview": document.get("markdown", "")[:800], "manifest": manifest, "steps": steps}
     Path("e2e-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     for name, ok in checks.items():
         print(("PASS " if ok else "FAIL ") + name)
+    print("Engines used: " + ", ".join(map(str, report["engines_used"])))
     print("Report: e2e-report.json | files: " + str(work))
     return 0 if report["passed"] else 1
 

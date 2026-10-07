@@ -42,7 +42,7 @@ class MistralOCR:
             raise PaperError("Defina MISTRAL_API_KEY para converter o PDF.")
         validate_pdf(pdf)
         if len(pdf) > OCR_MAX_BYTES:
-            raise PaperError(f"PDF de {len(pdf) // 1024 // 1024} MiB excede o limite de 50 MiB do Mistral OCR. Use --engine local.")
+            raise PaperError(f"PDF de {len(pdf) // 1024 // 1024} MiB excede o limite de 50 MiB do Mistral OCR.")
         total_pages = page_count(pdf)
         if pages is not None and (not pages or any(type(i) is not int or not 0 <= i < total_pages for i in pages)):
             raise PaperError(f"Seleção inválida: PDF tem {total_pages} páginas. Nenhuma chamada OCR realizada.")
@@ -53,10 +53,7 @@ class MistralOCR:
             payload["pages"] = pages
         if describe_images:
             payload["bbox_annotation_format"] = ANNOTATION_FORMAT
-        try:
-            response = self.transport.post_json("https://api.mistral.ai/v1/ocr", payload, self.key)
-        except PaperError as exc:
-            raise PaperError(f"{exc} Para extração local gratuita, use --engine local.") from None
+        response = self.transport.post_json("https://api.mistral.ai/v1/ocr", payload, self.key)
         if not isinstance(response, dict) or not isinstance(response.get("pages"), list) or not response["pages"]:
             raise PaperError("Mistral OCR retornou páginas ausentes ou vazias.")
         indices = set()

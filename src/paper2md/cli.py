@@ -31,8 +31,8 @@ def parser():
         cmd.add_argument("-o", "--output", type=Path, default=Path("papers"), help="Diretório de saída")
         cmd.add_argument("--no-describe-images", action="store_true", help="Desativar descrições (ativadas por padrão)")
         cmd.add_argument("--no-images", action="store_true", help="Não salvar imagens; preservar descrições")
-        cmd.add_argument("--engine", choices=("mistral", "local"), default=os.getenv("PAPER2MD_ENGINE", "auto"),
-                         help="mistral: OCR + figuras (pago); local: texto via PyMuPDF (grátis). Padrão: mistral se houver MISTRAL_API_KEY")
+        cmd.add_argument("--engine", choices=("auto", "mistral", "nanonets", "local"), default=os.getenv("PAPER2MD_ENGINE", "auto"),
+                         help="auto (padrão): Mistral OCR -> Nanonets -> local (pymupdf4llm), pulando APIs sem chave")
         cmd.add_argument("--model", default=os.getenv("OCR_MODEL", "mistral-ocr-latest"))
         cmd.add_argument("--json", action="store_true")
         cmd.add_argument("--force", action="store_true", help="Permitir substituir destino existente")
@@ -92,7 +92,7 @@ def main(argv=None):
                 if item["status"] == "error":
                     print(f"Erro: {item['source']}: {item['error']}", file=sys.stderr)
                 else:
-                    print(f"{item['id']} [{item['status']}]\n  PDF: {item['files']['pdf']}\n  Markdown: {item['files']['markdown']}")
+                    print(f"{item['id']} [{item['status']}, {item['engine']}]\n  PDF: {item['files']['pdf']}\n  Markdown: {item['files']['markdown']}")
                     if item["files"].get("text"):
                         print("  TXT: " + item["files"]["text"])
                     for warning in item["warnings"]:

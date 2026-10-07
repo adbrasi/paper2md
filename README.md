@@ -12,16 +12,18 @@ pip install .
 
 Para desenvolvimento: `pip install -e .`.
 
-Funciona sem nenhuma chave: busca (OpenAlex + arXiv) e extração local de texto (PyMuPDF) são gratuitas. A chave Mistral é opcional e habilita OCR com tabelas, equações e descrições de figuras. No PowerShell:
+Funciona sem nenhuma chave: busca (OpenAlex + arXiv) e extração local (pymupdf4llm) são gratuitas. As chaves Mistral e Nanonets são opcionais e habilitam OCR de melhor qualidade. No PowerShell:
 
 ```powershell
 $env:MISTRAL_API_KEY = "sua-chave"
+$env:NANONETS_API_KEY = "sua-chave"
 ```
 
 No Bash:
 
 ```bash
 export MISTRAL_API_KEY="sua-chave"
+export NANONETS_API_KEY="sua-chave"
 ```
 
 O arquivo `.env.example` serve como referência; a CLI **não carrega `.env` automaticamente**. Nunca coloque sua chave nos argumentos dos comandos.
@@ -62,7 +64,17 @@ paper2md get "https://openreview.net/forum?id=SE0W94BwgQ"
 paper2md get ./paper.pdf --format txt
 ```
 
-**Engine de conversão.** `--engine local` extrai o texto com PyMuPDF: grátis, offline, rápido, ideal para PDFs digitais (arXiv); não reconstrói tabelas/equações nem descreve figuras e falha em PDFs escaneados. `--engine mistral` usa Mistral OCR (pago). Padrão: `mistral` se `MISTRAL_API_KEY` existir, senão `local`; `PAPER2MD_ENGINE` fixa o padrão. Se a Mistral recusar (cota, créditos, chave), o erro indica usar `--engine local`.
+**Engines de conversão.** Padrão `auto`: tenta **Mistral OCR** → **Nanonets** → **local**, pulando APIs sem chave. Se uma engine falhar (cota, créditos, timeout, páginas faltando, PDF grande demais), a próxima assume e o aviso fica no resultado e no `manifest.json`. O campo `engine` de cada item diz qual foi usada.
+
+| Engine | Qualidade | Custo / tempo | Limites |
+|---|---|---|---|
+| `mistral` | Markdown, tabelas, equações, figuras extraídas com descrição | pago, segundos | PDF até 50 MiB |
+| `nanonets` | Markdown, tabelas em HTML, equações LaTeX | pago; até 5 páginas síncrono, acima disso assíncrono (~3 min para 23 páginas) | sem figuras extraídas |
+| `local` | pymupdf4llm: análise de layout, títulos, tabelas em Markdown | grátis, offline, ~0,5 s/página | não faz OCR de PDF escaneado; equações viram texto simples |
+
+`--engine mistral|nanonets|local` força uma engine. `PAPER2MD_ENGINE` fixa o padrão. Em `auto`, uma conversão já salva de qualquer engine da cadeia é reutilizada (em ordem de prioridade), sem novas chamadas pagas; para trocar uma conversão local por OCR, use `--engine mistral` ou `--engine nanonets`.
+
+A engine local usa [pymupdf4llm](https://pypi.org/project/pymupdf4llm/) com modelo de layout em ONNX (sem PyTorch/GPU). Marker, MinerU e olmOCR pontuam mais em benchmarks de OCR, mas exigem PyTorch, gigabytes de modelos e são lentos em CPU: inadequados para o último fallback.
 
 **Descrições de figuras ativadas por padrão (engine mistral).** Usa BBox Annotations da Mistral e insere descrições em português, identificadas como geradas por IA, junto às imagens. Isso pode custar mais que OCR básico; o valor depende da API/modelo. Desativar:
 
@@ -138,7 +150,8 @@ Buscas e índices de arquivos ficam no diretório de dados do usuário: `%LOCALA
 | Variável | Função |
 |---|---|
 | `MISTRAL_API_KEY` | OCR Mistral (opcional) |
-| `PAPER2MD_ENGINE` | Engine padrão: `mistral` ou `local` |
+| `NANONETS_API_KEY` | OCR Nanonets (opcional) |
+| `PAPER2MD_ENGINE` | Engine padrão: `auto`, `mistral`, `nanonets` ou `local` |
 | `OPENALEX_API_KEY` | Chave opcional para ampliar o orçamento OpenAlex |
 | `PAPER2MD_HOME` | Diretório do estado SQLite e locks |
 | `OCR_MODEL` | Modelo OCR; padrão `mistral-ocr-latest` |
@@ -156,7 +169,7 @@ Repetir `get` reobtém o PDF para conferir seu hash e reutiliza OCR compatível.
 - OpenAlex semântico só filtra por ano; a data exata `--since` é aplicada localmente. Alguns registros OpenAlex trazem só o ano (`AAAA-01-01`).
 - OpenAlex/arXiv: busca online reflete o índice disponível, sem garantia de indexação no mesmo dia. Data e origem aparecem nos resultados. Publicação recente, venue e citações não são garantia de qualidade científica.
 - OpenAlex usa limites/orçamento próprios; se falhar, o arXiv pode continuar e a CLI mostra cobertura reduzida. Respeita intervalo de 1 segundo OpenAlex e 3 segundos arXiv entre consultas desta instalação.
-- Downloads têm limite local de 200 MiB (papers de difusão costumam passar de 50 MiB por causa das imagens). O Mistral OCR aceita até 50 MiB; acima disso use `--engine local`. Documentos são enviados à Mistral para processamento; não há upload permanente pela Files API.
+- Downloads têm limite local de 200 MiB (papers de difusão costumam passar de 50 MiB por causa das imagens). O Mistral OCR aceita até 50 MiB; acima disso `auto` passa para a próxima engine. Com engines de API, o PDF é enviado ao provedor (a Nanonets guarda o arquivo processado em armazenamento próprio).
 - PyMuPDF valida a estrutura e conta as páginas antes da chamada paga; a CLI rejeita respostas OCR com páginas ausentes, inclusive a última. Isso verifica cobertura de páginas, não a exatidão de cada palavra extraída.
 - Chamadas pagas de OCR não são repetidas automaticamente após timeout. Uma chamada interrompida pode ter sido processada/cobrada pelo provedor.
 
@@ -171,8 +184,8 @@ Testes offline usam transporte HTTP simulado, sem créditos ou credenciais. Cobr
 E2E ao vivo (APIs reais, CLI como subprocesso, como um agente usaria); grava `e2e-report.json`:
 
 ```bash
+python -X utf8 tests/e2e_live.py              # cadeia auto
 python -X utf8 tests/e2e_live.py --engine local
-python -X utf8 tests/e2e_live.py --engine mistral
 ```
 
-Referências: [Mistral Document AI](https://docs.mistral.ai/studio/document-processing/overview), [Annotations](https://docs.mistral.ai/studio/document-processing/annotations), [OpenAlex semantic search](https://help.openalex.org/api/semantic-search/), [arXiv API](https://info.arxiv.org/help/api/index.html).
+Referências: [Mistral Document AI](https://docs.mistral.ai/studio/document-processing/overview), [Annotations](https://docs.mistral.ai/studio/document-processing/annotations), [OpenAlex semantic search](https://help.openalex.org/api/semantic-search/), [arXiv API](https://info.arxiv.org/help/api/index.html), [Nanonets extraction API](https://docstrange.nanonets.com/docs/quickstart).
