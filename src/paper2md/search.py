@@ -8,6 +8,9 @@ from .models import Paper, deduplicate
 from .sources import direct_source
 from .transport import PaperError
 
+# OpenAlex also indexes datasets, software releases and other non-paper records.
+NON_PAPER_TYPES = {"dataset", "software", "paratext", "libguides", "other", "erratum", "grant", "peer-review",
+                   "retraction", "supplementary-materials", "editorial", "standard"}
 ATOM = {"a": "http://www.w3.org/2005/Atom", "x": "http://arxiv.org/schemas/atom"}
 
 
@@ -108,7 +111,7 @@ class Searcher:
             "per_page": min(limit * 2, 50)}, headers=headers, service="OpenAlex")
         if not isinstance(data, dict) or not isinstance(data.get("results"), list):
             raise PaperError("OpenAlex: formato de resposta inválido.")
-        return [openalex_paper(r) for r in data["results"]]
+        return [openalex_paper(r) for r in data["results"] if not (isinstance(r, dict) and r.get("type") in NON_PAPER_TYPES)]
 
     def arxiv(self, query, since, limit):
         self.gate("arxiv", 3)

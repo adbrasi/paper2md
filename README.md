@@ -1,6 +1,6 @@
 # paper2md
 
-Descreva um assunto, escolha papers e entregue PDF + Markdown completo aos seus agentes. CLI Python pequena, sem servidor, Docker ou índice vetorial local.
+Pesquise um assunto, escolha papers e entregue PDF + texto completo aos seus agentes. CLI Python pequena, sem servidor, Docker ou índice vetorial local.
 
 ## Instalar
 
@@ -12,7 +12,7 @@ pip install .
 
 Para desenvolvimento: `pip install -e .`.
 
-Configure a chave Mistral no ambiente. No PowerShell:
+Funciona sem nenhuma chave: busca (OpenAlex + arXiv) e extração local de texto (PyMuPDF) são gratuitas. A chave Mistral é opcional e habilita OCR com tabelas, equações e descrições de figuras. No PowerShell:
 
 ```powershell
 $env:MISTRAL_API_KEY = "sua-chave"
@@ -31,10 +31,10 @@ O arquivo `.env.example` serve como referência; a CLI **não carrega `.env` aut
 ### 1. Pesquisar
 
 ```bash
-paper2md search "métodos eficientes de fine-tuning de modelos diffusion, comparando LoRA e DoRA"
+paper2md search "parameter-efficient fine-tuning of diffusion models" "LoRA DoRA text-to-image"
 ```
 
-Pesquisa OpenAlex por significado e arXiv por termos técnicos. A Mistral traduz/expande sua descrição; os papers e metadados vêm das APIs, não são referências inventadas pelo modelo. Sem chave, busca com sua consulta original e informa a limitação.
+Aceita de 1 a 5 consultas em inglês. Cada uma roda no OpenAlex (busca semântica, aceita frases descritivas) e no arXiv (exige **todos** os termos, então prefira 2–5 palavras-chave); os rankings são fundidos e deduplicados. Não há LLM na busca: o agente que chama a ferramenta escreve as consultas. Os papers e metadados vêm sempre das APIs.
 
 Padrão: dez resultados, últimos dois anos móveis, ordenados por relevância. Não amplia a janela silenciosamente. Para métodos fundacionais como LoRA original ou DreamBooth, amplie a data:
 
@@ -62,7 +62,9 @@ paper2md get "https://openreview.net/forum?id=SE0W94BwgQ"
 paper2md get ./paper.pdf --format txt
 ```
 
-**Descrições de figuras ativadas por padrão.** Usa BBox Annotations da Mistral e insere descrições em português, identificadas como geradas por IA, junto às imagens. Isso pode custar mais que OCR básico; o valor depende da API/modelo. Desativar:
+**Engine de conversão.** `--engine local` extrai o texto com PyMuPDF: grátis, offline, rápido, ideal para PDFs digitais (arXiv); não reconstrói tabelas/equações nem descreve figuras e falha em PDFs escaneados. `--engine mistral` usa Mistral OCR (pago). Padrão: `mistral` se `MISTRAL_API_KEY` existir, senão `local`; `PAPER2MD_ENGINE` fixa o padrão. Se a Mistral recusar (cota, créditos, chave), o erro indica usar `--engine local`.
+
+**Descrições de figuras ativadas por padrão (engine mistral).** Usa BBox Annotations da Mistral e insere descrições em português, identificadas como geradas por IA, junto às imagens. Isso pode custar mais que OCR básico; o valor depende da API/modelo. Desativar:
 
 ```bash
 paper2md get arxiv:2402.09353 --no-describe-images
@@ -135,10 +137,10 @@ Buscas e índices de arquivos ficam no diretório de dados do usuário: `%LOCALA
 
 | Variável | Função |
 |---|---|
-| `MISTRAL_API_KEY` | Expansão da busca e OCR |
+| `MISTRAL_API_KEY` | OCR Mistral (opcional) |
+| `PAPER2MD_ENGINE` | Engine padrão: `mistral` ou `local` |
 | `OPENALEX_API_KEY` | Chave opcional para ampliar o orçamento OpenAlex |
 | `PAPER2MD_HOME` | Diretório do estado SQLite e locks |
-| `SEARCH_MODEL` | Modelo de expansão; padrão `mistral-small-latest` |
 | `OCR_MODEL` | Modelo OCR; padrão `mistral-ocr-latest` |
 
 Repetir `get` reobtém o PDF para conferir seu hash e reutiliza OCR compatível. Mudar páginas, modelo ou opções de figuras cria uma configuração distinta. `read` reutiliza a versão salva e entrega sua data/hash: use `get` para conferir alterações na fonte. Para reprodução exata, use URL arXiv versionada e nome de modelo fixo; o alias `latest` pode mudar no provedor.
@@ -148,11 +150,13 @@ Repetir `get` reobtém o PDF para conferir seu hash e reutiliza OCR compatível.
 ## Fontes e limites
 
 - arXiv e Hugging Face Papers: resolve PDFs por ID, incluindo versões arXiv.
-- OpenReview: PDF público da submissão. Submissões privadas exigem arquivo local.
+- OpenReview: PDF público da submissão. Em 2026-10 o OpenReview passou a exigir verificação antibot para clientes automatizados; nesse caso baixe o PDF no navegador e use o arquivo local.
 - IEEE e outros sites: tenta PDF público direto ou metadados `citation_pdf_url`/link inequívoco. Bloqueios de login, paywall ou antibot retornam erro; forneça o PDF obtido com seu acesso.
+- Registros OpenAlex que não são papers (datasets, software, errata etc.) são descartados. O `venue` costuma aparecer como arXiv mesmo para papers publicados em conferência.
+- OpenAlex semântico só filtra por ano; a data exata `--since` é aplicada localmente. Alguns registros OpenAlex trazem só o ano (`AAAA-01-01`).
 - OpenAlex/arXiv: busca online reflete o índice disponível, sem garantia de indexação no mesmo dia. Data e origem aparecem nos resultados. Publicação recente, venue e citações não são garantia de qualidade científica.
 - OpenAlex usa limites/orçamento próprios; se falhar, o arXiv pode continuar e a CLI mostra cobertura reduzida. Respeita intervalo de 1 segundo OpenAlex e 3 segundos arXiv entre consultas desta instalação.
-- PDFs têm limite local de 50 MiB. A Mistral pode impor outros limites. Documentos são enviados à Mistral para processamento; não há upload permanente pela Files API.
+- Downloads têm limite local de 200 MiB (papers de difusão costumam passar de 50 MiB por causa das imagens). O Mistral OCR aceita até 50 MiB; acima disso use `--engine local`. Documentos são enviados à Mistral para processamento; não há upload permanente pela Files API.
 - PyMuPDF valida a estrutura e conta as páginas antes da chamada paga; a CLI rejeita respostas OCR com páginas ausentes, inclusive a última. Isso verifica cobertura de páginas, não a exatidão de cada palavra extraída.
 - Chamadas pagas de OCR não são repetidas automaticamente após timeout. Uma chamada interrompida pode ter sido processada/cobrada pelo provedor.
 
@@ -163,5 +167,12 @@ python -m unittest discover -s tests -v
 ```
 
 Testes offline usam transporte HTTP simulado, sem créditos ou credenciais. Cobrem seleção persistente, falhas parciais, resolução de links, annotations por padrão, páginas, cache, arquivos existentes, exportação e nomes seguros de imagens.
+
+E2E ao vivo (APIs reais, CLI como subprocesso, como um agente usaria); grava `e2e-report.json`:
+
+```bash
+python -X utf8 tests/e2e_live.py --engine local
+python -X utf8 tests/e2e_live.py --engine mistral
+```
 
 Referências: [Mistral Document AI](https://docs.mistral.ai/studio/document-processing/overview), [Annotations](https://docs.mistral.ai/studio/document-processing/annotations), [OpenAlex semantic search](https://help.openalex.org/api/semantic-search/), [arXiv API](https://info.arxiv.org/help/api/index.html).

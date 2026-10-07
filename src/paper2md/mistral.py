@@ -22,6 +22,8 @@ def parse_pages(value):
     return sorted(pages)
 
 
+OCR_MAX_BYTES = 50 * 1024 * 1024
+
 ANNOTATION_FORMAT = {"type": "json_schema", "json_schema": {
     "name": "figure_description", "strict": True, "schema": {
         "type": "object", "properties": {
@@ -39,6 +41,8 @@ class MistralOCR:
         if not self.key:
             raise PaperError("Defina MISTRAL_API_KEY para converter o PDF.")
         validate_pdf(pdf)
+        if len(pdf) > OCR_MAX_BYTES:
+            raise PaperError(f"PDF de {len(pdf) // 1024 // 1024} MiB excede o limite de 50 MiB do Mistral OCR. Use --engine local.")
         total_pages = page_count(pdf)
         if pages is not None and (not pages or any(type(i) is not int or not 0 <= i < total_pages for i in pages)):
             raise PaperError(f"Seleção inválida: PDF tem {total_pages} páginas. Nenhuma chamada OCR realizada.")

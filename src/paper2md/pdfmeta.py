@@ -1,3 +1,5 @@
+import re
+
 import pymupdf
 
 from .sources import validate_pdf
@@ -20,6 +22,9 @@ def page_count(pdf):
         raise PaperError("Não foi possível ler a estrutura do PDF; arquivo inválido ou danificado.") from None
 
 
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")  # PDF text can carry control chars that make tools treat it as binary
+
+
 def extract_local(pdf, pages=None):
     """Free offline text extraction, shaped like a Mistral OCR response so export stays shared."""
     total = page_count(pdf)
@@ -27,7 +32,7 @@ def extract_local(pdf, pages=None):
         raise PaperError(f"Seleção inválida: PDF tem {total} páginas.")
     indices = pages if pages is not None else range(total)
     with pymupdf.open(stream=pdf, filetype="pdf") as document:
-        extracted = [{"index": i, "markdown": document[i].get_text(), "images": []} for i in indices]
+        extracted = [{"index": i, "markdown": CONTROL.sub("", document[i].get_text()), "images": []} for i in indices]
     if not any(page["markdown"].strip() for page in extracted):
         raise PaperError("PDF sem camada de texto (provavelmente escaneado); use --engine mistral.")
     return {"model": "pymupdf-" + pymupdf.VersionBind, "pages": extracted,

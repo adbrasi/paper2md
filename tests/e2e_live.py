@@ -56,6 +56,7 @@ def main():
     manifest = document.get("manifest", {})
     pages = (manifest.get("page_validation") or {})
     checks["read_full_markdown"] = step["exit"] == 0 and len(document.get("markdown", "")) > 5000
+    checks["read_no_control_chars"] = not any(ord(c) < 32 and c not in "\n\t" for c in document.get("markdown", ""))
     checks["read_all_pages"] = (not manifest.get("partial")) and pages.get("all_requested_pages_present") is True \
         and document["markdown"].count("<!-- Página ") == pages.get("pdf_page_count")
 

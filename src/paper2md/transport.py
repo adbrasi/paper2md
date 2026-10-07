@@ -15,7 +15,7 @@ def public_url(url):
 
 
 class Transport:
-    def __init__(self, client=None, max_bytes=50 * 1024 * 1024):
+    def __init__(self, client=None, max_bytes=200 * 1024 * 1024):
         self.client = client or httpx.Client(timeout=httpx.Timeout(120, connect=20), follow_redirects=True,
                                              max_redirects=5, headers={"User-Agent": "paper2md/0.1 (personal paper retrieval)"})
         self.owned = client is None
